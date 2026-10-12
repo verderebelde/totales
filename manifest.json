@@ -1,0 +1,21 @@
+{
+  "name": "Verde Rebelde · Totales",
+  "short_name": "Verde Rebelde",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2e7d32",
+  "icons": [
+    {
+      "src": "https://lh3.googleusercontent.com/d/1p5CySNTWSX8fl02aYOr1VVRlTWLSZI-e=s192-c",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://lh3.googleusercontent.com/d/1p5CySNTWSX8fl02aYOr1VVRlTWLSZI-e=s512-c",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
