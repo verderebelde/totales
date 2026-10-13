@@ -95,6 +95,11 @@ textarea{width:100%;min-height:110px;font:15px 'Montserrat';padding:12px;border-
 .l-fmt{font-size:11.5px;color:var(--muted);text-align:center}
 .l-cant{font-weight:700;font-size:16px;text-align:center}
 .l-tot{text-align:right;font-size:12.5px;color:var(--muted)}
+.btn-cerrar{border:none;background:#eef2ee;color:#555;font:700 20px 'Montserrat';width:42px;height:42px;border-radius:50%}
+.aviso-cerrar{position:fixed;left:14px;right:14px;bottom:20px;background:#333;color:white;font-size:14px;padding:12px 14px;border-radius:12px;z-index:20;text-align:center}
+.ped.pend{border-color:#ffcc80;background:#fffaf2}
+.etq-pend{font-size:11px;font-weight:700;color:#e65100;background:#fff3e0;border-radius:6px;padding:2px 7px;margin-left:6px;vertical-align:middle}
+.sec-ped{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--primary);margin:14px 0 8px;font-weight:700}
 </style>
 </head>
 <body>
@@ -102,12 +107,12 @@ textarea{width:100%;min-height:110px;font:15px 'Montserrat';padding:12px;border-
 <header>
   <div class="top">
     <div class="marca"><img src="https://lh3.googleusercontent.com/d/1p5CySNTWSX8fl02aYOr1VVRlTWLSZI-e" alt="Verde Rebelde"><h1>Totales</h1></div>
-    <button class="btn-refrescar" onclick="cargar()">↻ Actualizar</button>
+    <button class="btn-cerrar" onclick="cerrarApp()" title="Cerrar">✕</button>
   </div>
   <div class="estado"><span class="punto" id="punto"></span><span id="estado">Cargando…</span></div>
   <div class="tabs">
     <button class="tab activa" id="tab-totales" onclick="verVista('totales')">⚖️ Totales</button>
-    <button class="tab" id="tab-pedidos" onclick="verVista('pedidos')">📦 Pedidos (BYS) <span id="n-ped"></span></button>
+    <button class="tab" id="tab-pedidos" onclick="verVista('pedidos')">📦 Pedidos <span id="n-ped"></span></button>
   </div>
 </header>
 
@@ -125,6 +130,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwdQsPAPbOUmlxw-L7N-_gj
 const CADA_SEGUNDOS = 30;
 let totales = [];
 let pedidosBys = [];
+let pendientes = [];      // pedidos de la hoja PEDIDOS, aún sin confirmar
 let cargando = false;
 
 function esc(s){
@@ -254,30 +260,72 @@ function pintarTotales(){
 
 
 /* ---------- PEDIDOS tal como están en BYS ---------- */
+// Líneas "1.5 x PRODUCTO - €3.00" del texto de un pedido sin confirmar
+function itemsDeTexto(texto){
+  return String(texto || "").split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/^([\d.,]+)\s*x\s+(.*?)(?:\s+-\s+€\s*([\d.,]+))?$/);
+    if (!m) return { producto: l, formato: "", cantidad: "", importe: null };
+    return { producto: m[2], formato: "", cantidad: parseFloat(m[1].replace(",", ".")),
+             importe: m[3] ? parseFloat(m[3].replace(",", ".")) : null };
+  });
+}
+
+function tarjetaPedido(nombre, total, notas, lineas, pendiente){
+  return `
+    <div class="ped ${pendiente ? "pend" : ""}">
+      <div class="ped-cab"><span class="ped-nombre">${esc(nombre)}${pendiente ? '<span class="etq-pend">⏳ Sin confirmar</span>' : ""}</span>
+        <span class="ped-total">${total}</span></div>
+      ${notas ? `<div class="ped-notas">${esc(notas)}</div>` : ""}
+      ${lineas.map(it => `
+        <div class="linea">
+          <div class="l-prod">${esc(it.producto)}</div>
+          <div class="l-fmt">${esc(it.formato || "")}</div>
+          <div class="l-cant">${it.cantidad === "" ? "" : num(it.cantidad)}</div>
+          <div class="l-tot">${it.importe === null ? "" : num(it.importe) + " €"}</div>
+        </div>`).join("")}
+    </div>`;
+}
+
 function pintarPedidos(){
   const q = document.getElementById("buscar").value.trim().toLowerCase();
-  const lista = pedidosBys.filter(p => !q || p.nombre.toLowerCase().includes(q) ||
-                                       p.items.some(it => it.producto.toLowerCase().includes(q)));
-  document.getElementById("n-ped").textContent = pedidosBys.length ? "(" + pedidosBys.length + ")" : "";
+  const coincide = (nombre, productos) => !q || nombre.toLowerCase().includes(q) || productos.some(p => p.toLowerCase().includes(q));
+
+  const pend = pendientes.map(p => ({ p, items: itemsDeTexto(p.pedido) }))
+    .filter(x => coincide(x.p.nombre, x.items.map(i => i.producto)));
+  const bys = pedidosBys.filter(p => coincide(p.nombre, p.items.map(i => i.producto)));
+
+  const totalN = pendientes.length + pedidosBys.length;
+  document.getElementById("n-ped").textContent = totalN ? "(" + totalN + ")" : "";
   const cont = document.getElementById("pedidos");
-  if (!pedidosBys.length) { cont.innerHTML = '<div class="vacio">No hay pedidos cargados en BYS</div>'; return; }
-  if (!lista.length) { cont.innerHTML = '<div class="vacio">Nada coincide con la búsqueda</div>'; return; }
-  cont.innerHTML = lista.map(p => {
-    const total = p.items.reduce((s, it) => s + it.precio * it.cantidad, 0);
-    const lineas = p.items.map(it => `
-      <div class="linea">
-        <div class="l-prod">${esc(it.producto)}</div>
-        <div class="l-fmt">${esc(it.formato)}</div>
-        <div class="l-cant">${num(it.cantidad)}</div>
-        <div class="l-tot">${num(it.precio * it.cantidad)} €</div>
-      </div>`).join("");
-    return `
-      <div class="ped">
-        <div class="ped-cab"><span class="ped-nombre">${esc(p.nombre)}</span><span class="ped-total">${num(total)} €</span></div>
-        ${p.notas ? `<div class="ped-notas">${esc(p.notas)}</div>` : ""}
-        ${lineas}
-      </div>`;
-  }).join("");
+  if (!totalN) { cont.innerHTML = '<div class="vacio">No hay pedidos</div>'; return; }
+  if (!pend.length && !bys.length) { cont.innerHTML = '<div class="vacio">Nada coincide con la búsqueda</div>'; return; }
+
+  let html = "";
+  if (pend.length) {
+    html += `<div class="sec-ped">⏳ Sin confirmar (${pend.length})</div>`;
+    html += pend.map(x => tarjetaPedido(x.p.nombre, esc(x.p.total), x.p.observaciones, x.items, true)).join("");
+  }
+  if (bys.length) {
+    html += `<div class="sec-ped">✅ En BYS (${bys.length})</div>`;
+    html += bys.map(p => {
+      const total = p.items.reduce((s, it) => s + it.precio * it.cantidad, 0);
+      return tarjetaPedido(p.nombre, num(total) + " €", p.notas,
+        p.items.map(it => ({ producto: it.producto, formato: it.formato, cantidad: it.cantidad, importe: it.precio * it.cantidad })), false);
+    }).join("");
+  }
+  cont.innerHTML = html;
+}
+
+function cerrarApp(){
+  window.close();
+  setTimeout(() => {                         // si el móvil no deja cerrarla, se explica cómo
+    if (document.querySelector(".aviso-cerrar")) return;
+    const a = document.createElement("div");
+    a.className = "aviso-cerrar";
+    a.textContent = "El móvil no deja cerrar la página desde aquí: ciérrala desde el botón de apps abiertas (deslizando hacia arriba).";
+    document.body.appendChild(a);
+    setTimeout(() => a.remove(), 4000);
+  }, 300);
 }
 
 function cargar(){
@@ -288,6 +336,7 @@ function cargar(){
       cargando = false;
       totales = d.totales || [];
       pedidosBys = d.bys || [];
+      pendientes = d.pendientes || [];
       pintarTotales();
       pintarPedidos();
       estado("Actualizado " + new Date().toLocaleTimeString("es-ES") + " · se actualiza solo");
